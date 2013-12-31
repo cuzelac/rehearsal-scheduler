@@ -21,3 +21,9 @@
 
 * N-casting
     * double-casting used extensively in opera
+
+## Links
+
+* Calendar scheduling algorithm: http://stackoverflow.com/questions/3235306/calendar-scheduler-algorithm
+    * Good explanation of using a DAG
+    * 
