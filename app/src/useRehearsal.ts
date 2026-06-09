@@ -92,6 +92,14 @@ export function useRehearsal() {
     setRehearsal((r) => ({ ...r, schedule: newOrder }));
   }
 
+  // Reorder the scenes list for display only; does not affect the schedule.
+  function reorderScenes(newOrder: string[]) {
+    setRehearsal((r) => {
+      const byId = Object.fromEntries(r.scenes.map((s) => [s.id, s]));
+      return { ...r, scenes: newOrder.map((id) => byId[id]).filter(Boolean) as Scene[] };
+    });
+  }
+
   function runAutoSchedule() {
     if (optimizing) return;
 
@@ -153,6 +161,7 @@ export function useRehearsal() {
     removeScene,
     updateScene,
     reorderSchedule,
+    reorderScenes,
     runAutoSchedule,
     setStartMinute,
     clearAll,
