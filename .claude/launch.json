@@ -1,0 +1,11 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "rehearsal-scheduler",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "--prefix", "app", "dev"],
+      "port": 5173
+    }
+  ]
+}
