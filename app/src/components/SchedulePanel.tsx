@@ -227,7 +227,7 @@ function buildEmailText(
   return lines.join('\n');
 }
 
-export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, setStartMinute }: Props) {
+export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, setStartMinute, optimizing, optimizeProgress }: Props) {
   const startMinute = rehearsal.startMinute;
   const [copied, setCopied] = useState(false);
 
@@ -288,12 +288,21 @@ export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, set
           />
         </div>
         <div className="schedule-buttons">
-          <button onClick={runAutoSchedule}>Auto-optimize</button>
-          <button className="btn-ghost" onClick={handleCopy}>
+          <button onClick={runAutoSchedule} disabled={optimizing}>
+            {optimizing ? 'Optimizing…' : 'Auto-optimize'}
+          </button>
+          <button className="btn-ghost" onClick={handleCopy} disabled={optimizing}>
             {copied ? 'Copied!' : 'Copy for email'}
           </button>
         </div>
       </div>
+
+      {optimizing && (
+        <div className="optimize-progress" role="progressbar" aria-valuenow={Math.round(optimizeProgress * 100)}>
+          <div className="optimize-bar" style={{ width: `${Math.round(optimizeProgress * 100)}%` }} />
+          <span className="optimize-pct">{Math.round(optimizeProgress * 100)}%</span>
+        </div>
+      )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
         <SortableContext items={rehearsal.schedule} strategy={verticalListSortingStrategy}>

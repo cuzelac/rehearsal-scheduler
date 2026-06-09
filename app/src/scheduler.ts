@@ -47,55 +47,195 @@ export function computeMetrics(orderedScenes: Scene[]): ScheduleMetrics {
   };
 }
 
-// 2-opt local search to minimize total idle time
 function totalIdle(order: Scene[]): number {
   return computeMetrics(order).totalIdleMinutes;
 }
 
-export function autoSchedule(scenes: Scene[]): string[] {
-  if (scenes.length <= 1) return scenes.map((s) => s.id);
+function shuffle<T>(arr: T[]): T[] {
+  const a = [...arr];
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
+}
 
-  // Start with a greedy seed: sort by number of roles desc so complex scenes go first
-  let best = [...scenes].sort((a, b) => b.roleIds.length - a.roleIds.length);
-  let bestCost = totalIdle(best);
+function popcount32(x: number): number {
+  x = x - ((x >>> 1) & 0x55555555);
+  x = (x & 0x33333333) + ((x >>> 2) & 0x33333333);
+  x = (x + (x >>> 4)) & 0x0f0f0f0f;
+  return (x * 0x01010101) >>> 24;
+}
 
-  // 2-opt: try all pairwise swaps until no improvement
-  let improved = true;
-  while (improved) {
-    improved = false;
-    for (let i = 0; i < best.length - 1; i++) {
-      for (let j = i + 1; j < best.length; j++) {
-        const candidate = [...best];
-        [candidate[i], candidate[j]] = [candidate[j], candidate[i]];
+// Limits for the exact Held–Karp DP. Above these, fall back to the heuristic.
+const EXACT_MAX_SCENES = 25; // 2^25 states; ~300MB peak, ~1–3s
+const EXACT_MAX_ROLES = 32; // single 32-bit role bitmask
+
+/**
+ * Exact optimal schedule via Held–Karp bitmask DP over scene subsets.
+ *
+ * Total idle = Σ_k duration[k] · |roles present-but-not-acting during scene k|.
+ * For a fixed *set* S of scenes placed before position k, the marginal idle of
+ * placing k next depends only on (S, k): a role waits during k iff it appeared
+ * in S, will appear again in the complement (U \ S \ {k}), and is not in k.
+ * That subset-decomposable cost is exactly what Held–Karp optimises.
+ *
+ * Returns null if the problem is too large for the exact method.
+ */
+function exactSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] | null {
+  const N = scenes.length;
+  if (N > EXACT_MAX_SCENES) return null;
+
+  // Map roles to bit indices.
+  const roleIndex = new Map<string, number>();
+  for (const scene of scenes) {
+    for (const rid of scene.roleIds) {
+      if (!roleIndex.has(rid)) roleIndex.set(rid, roleIndex.size);
+    }
+  }
+  if (roleIndex.size > EXACT_MAX_ROLES) return null;
+
+  const sceneRoleMask = scenes.map((s) => {
+    let m = 0;
+    for (const rid of s.roleIds) m |= 1 << roleIndex.get(rid)!;
+    return m >>> 0;
+  });
+
+  const full = N === 32 ? 0xffffffff : (1 << N) - 1;
+  const size = full + 1;
+
+  // orMask[S] = union of role masks over the scenes in subset S.
+  const orMask = new Int32Array(size);
+  for (let S = 1; S <= full; S++) {
+    const low = S & -S;
+    const k = 31 - Math.clz32(low);
+    orMask[S] = orMask[(S ^ low) >>> 0] | sceneRoleMask[k];
+  }
+
+  const INF = 0x3fffffff;
+  const cost = new Int32Array(size).fill(INF);
+  const parent = new Int8Array(size).fill(-1);
+  cost[0] = 0;
+
+  const progressEvery = Math.max(1, size >> 7); // ~128 updates over the run
+
+  for (let S = 0; S <= full; S++) {
+    if (onProgress && (S & (progressEvery - 1)) === 0) onProgress(S / size);
+    const c = cost[S];
+    if (c === INF) continue;
+    const appeared = orMask[S];
+    let avail = (full ^ S) >>> 0;
+    while (avail) {
+      const low = avail & -avail;
+      avail ^= low;
+      const k = 31 - Math.clz32(low);
+      const newS = (S | low) >>> 0;
+      const complement = (full ^ newS) >>> 0;
+      const waiting = popcount32(
+        (appeared & orMask[complement] & ~sceneRoleMask[k]) >>> 0
+      );
+      const nc = c + scenes[k].duration * waiting;
+      if (nc < cost[newS]) {
+        cost[newS] = nc;
+        parent[newS] = k;
+      }
+    }
+  }
+
+  // Reconstruct the order by following parent pointers back from the full set.
+  const order: number[] = [];
+  let S = full;
+  while (S) {
+    const k = parent[S];
+    order.push(k);
+    S = (S ^ (1 << k)) >>> 0;
+  }
+  order.reverse();
+  return order.map((i) => scenes[i].id);
+}
+
+// Or-opt + 2-opt local search from a given starting order. Returns the locally optimal order.
+function localSearch(start: Scene[]): Scene[] {
+  let current = [...start];
+  let currentCost = totalIdle(current);
+
+  let anyImproved = true;
+  while (anyImproved) {
+    anyImproved = false;
+
+    // Or-opt: try reinserting each scene at every other position
+    for (let i = 0; i < current.length; i++) {
+      for (let j = 0; j < current.length; j++) {
+        if (i === j || i === j + 1) continue;
+        const scene = current[i];
+        const without = [...current.slice(0, i), ...current.slice(i + 1)];
+        const insertAt = j < i ? j + 1 : j;
+        const candidate = [...without.slice(0, insertAt), scene, ...without.slice(insertAt)];
         const cost = totalIdle(candidate);
-        if (cost < bestCost) {
-          best = candidate;
-          bestCost = cost;
-          improved = true;
+        if (cost < currentCost) {
+          current = candidate;
+          currentCost = cost;
+          anyImproved = true;
+          break;
+        }
+      }
+      if (anyImproved) break;
+    }
+
+    // 2-opt: try all pairwise swaps
+    let swapImproved = true;
+    while (swapImproved) {
+      swapImproved = false;
+      for (let i = 0; i < current.length - 1; i++) {
+        for (let j = i + 1; j < current.length; j++) {
+          const candidate = [...current];
+          [candidate[i], candidate[j]] = [candidate[j], candidate[i]];
+          const cost = totalIdle(candidate);
+          if (cost < currentCost) {
+            current = candidate;
+            currentCost = cost;
+            swapImproved = true;
+            anyImproved = true;
+          }
         }
       }
     }
   }
 
-  // Also try segment reversals (standard 2-opt)
-  improved = true;
-  while (improved) {
-    improved = false;
-    for (let i = 0; i < best.length - 1; i++) {
-      for (let j = i + 2; j <= best.length; j++) {
-        const candidate = [
-          ...best.slice(0, i),
-          ...best.slice(i, j).reverse(),
-          ...best.slice(j),
-        ];
-        const cost = totalIdle(candidate);
-        if (cost < bestCost) {
-          best = candidate;
-          bestCost = cost;
-          improved = true;
-        }
-      }
+  return current;
+}
+
+export type ProgressFn = (fraction: number) => void;
+
+export function autoSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] {
+  if (scenes.length <= 1) {
+    onProgress?.(1);
+    return scenes.map((s) => s.id);
+  }
+
+  // Tier 1: exact optimal via Held–Karp DP (N ≤ 25, roles ≤ 32)
+  const exact = exactSchedule(scenes, onProgress);
+  if (exact) {
+    onProgress?.(1);
+    return exact;
+  }
+
+  // Tier 2: multi-start Or-opt + 2-opt fallback for larger problems
+  const STARTS = 50;
+  const greedySeed = [...scenes].sort((a, b) => b.roleIds.length - a.roleIds.length);
+
+  let best = localSearch(greedySeed);
+  let bestCost = totalIdle(best);
+  onProgress?.(1 / STARTS);
+
+  for (let s = 1; s < STARTS; s++) {
+    const result = localSearch(shuffle(scenes));
+    const cost = totalIdle(result);
+    if (cost < bestCost) {
+      best = result;
+      bestCost = cost;
     }
+    onProgress?.((s + 1) / STARTS);
   }
 
   return best.map((s) => s.id);

@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { Rehearsal, Role, Scene } from './types';
-import { autoSchedule } from './scheduler';
+import type { WorkerRequest, WorkerResponse } from './scheduler.worker';
 
 const STORAGE_KEY = 'rehearsal-scheduler-v1';
 
@@ -28,10 +28,18 @@ function load(): Rehearsal {
 
 export function useRehearsal() {
   const [rehearsal, setRehearsal] = useState<Rehearsal>(load);
+  const [optimizing, setOptimizing] = useState(false);
+  const [optimizeProgress, setOptimizeProgress] = useState(0);
+  const workerRef = useRef<Worker | null>(null);
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(rehearsal));
   }, [rehearsal]);
+
+  // Tear down any running worker when the hook unmounts.
+  useEffect(() => {
+    return () => workerRef.current?.terminate();
+  }, []);
 
   function addRole(name: string) {
     const role: Role = { id: newId(), name: name.trim() };
@@ -85,17 +93,45 @@ export function useRehearsal() {
   }
 
   function runAutoSchedule() {
-    setRehearsal((r) => {
-      const sceneMap = Object.fromEntries(r.scenes.map((s) => [s.id, s]));
-      const ordered = autoSchedule(r.scenes);
-      // Only include scenes currently in the schedule
-      const inSchedule = new Set(r.schedule);
-      const result = ordered.filter((id) => inSchedule.has(id));
-      // Append any scenes somehow missing
-      r.schedule.forEach((id) => { if (!result.includes(id)) result.push(id); });
-      void sceneMap;
-      return { ...r, schedule: result };
+    if (optimizing) return;
+
+    // Optimize the scenes currently in the schedule, in their present order.
+    const sceneMap = Object.fromEntries(rehearsal.scenes.map((s) => [s.id, s]));
+    const orderedScenes = rehearsal.schedule
+      .map((id) => sceneMap[id])
+      .filter(Boolean) as Scene[];
+    if (orderedScenes.length <= 1) return;
+
+    setOptimizing(true);
+    setOptimizeProgress(0);
+
+    workerRef.current?.terminate();
+    const worker = new Worker(new URL('./scheduler.worker.ts', import.meta.url), {
+      type: 'module',
     });
+    workerRef.current = worker;
+
+    worker.onmessage = (e: MessageEvent<WorkerResponse>) => {
+      const msg = e.data;
+      if (msg.type === 'progress') {
+        setOptimizeProgress(msg.value);
+        return;
+      }
+      // result: merge the optimized order back into the latest schedule
+      setRehearsal((r) => {
+        const inSchedule = new Set(r.schedule);
+        const result = msg.schedule.filter((id) => inSchedule.has(id));
+        r.schedule.forEach((id) => { if (!result.includes(id)) result.push(id); });
+        return { ...r, schedule: result };
+      });
+      setOptimizeProgress(1);
+      setOptimizing(false);
+      worker.terminate();
+      if (workerRef.current === worker) workerRef.current = null;
+    };
+
+    const req: WorkerRequest = { scenes: orderedScenes };
+    worker.postMessage(req);
   }
 
   function setStartMinute(minutes: number) {
@@ -108,6 +144,8 @@ export function useRehearsal() {
 
   return {
     rehearsal,
+    optimizing,
+    optimizeProgress,
     addRole,
     removeRole,
     updateRole,
