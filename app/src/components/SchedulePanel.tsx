@@ -86,7 +86,7 @@ function SortableSceneRow({
   );
 }
 
-type SortKey = 'role' | 'call' | 'release' | 'idle';
+type SortKey = 'role' | 'call' | 'release' | 'calltime' | 'idle';
 type SortDir = 'asc' | 'desc';
 
 function IdleSummary({
@@ -144,11 +144,13 @@ function IdleSummary({
     if (sortKey === 'role') cmp = roleName(a).localeCompare(roleName(b));
     else if (sortKey === 'call') cmp = a.firstCall - b.firstCall;
     else if (sortKey === 'release') cmp = a.lastRelease - b.lastRelease;
+    else if (sortKey === 'calltime') cmp = (a.lastRelease - a.firstCall) - (b.lastRelease - b.firstCall);
     else if (sortKey === 'idle') cmp = a.idleMinutes - b.idleMinutes;
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
   const idles = metrics.roleSpans.map((s) => s.idleMinutes);
+  const totalCallTime = metrics.roleSpans.reduce((sum, s) => sum + (s.lastRelease - s.firstCall), 0);
   const worstIdle = idles.length ? Math.max(...idles) : 0;
   const meanIdle = idles.length ? idles.reduce((a, b) => a + b, 0) / idles.length : 0;
   const spreadIdle = idles.length
@@ -159,6 +161,9 @@ function IdleSummary({
     <div className="idle-summary">
       <div className="summary-header">
         <span>Total rehearsal: <strong>{fmtDuration(metrics.totalDuration)}</strong></span>
+        <span className="metric" title="Sum of every role's call time (release − call), i.e. total hours the cast is held">
+          Total call time: <strong>{fmtDuration(totalCallTime)}</strong>
+        </span>
         <span className={`metric${objective === 'total' ? ' active' : ''}`} title="Sum of every role's idle time">
           Total idle: <strong>{fmtDuration(metrics.totalIdleMinutes)}</strong>
         </span>
@@ -175,6 +180,7 @@ function IdleSummary({
             <th className="sortable" onClick={() => handleSort('role')}>Role {sortIndicator('role')}</th>
             <th className="sortable" onClick={() => handleSort('call')}>Call {sortIndicator('call')}</th>
             <th className="sortable" onClick={() => handleSort('release')}>Release {sortIndicator('release')}</th>
+            <th className="sortable" onClick={() => handleSort('calltime')}>Call time {sortIndicator('calltime')}</th>
             <th className="sortable" onClick={() => handleSort('idle')}>Idle {sortIndicator('idle')}</th>
           </tr>
         </thead>
@@ -186,6 +192,7 @@ function IdleSummary({
                   <td>{role?.name ?? span.roleId}</td>
                   <td>{fmtTime(span.firstCall)}</td>
                   <td>{fmtTime(span.lastRelease)}</td>
+                  <td>{fmtDuration(span.lastRelease - span.firstCall)}</td>
                   <td className={span.idleMinutes > 0 ? 'idle-warn' : ''}>
                     {span.idleMinutes > 0 ? fmtDuration(span.idleMinutes) : '—'}
                   </td>
