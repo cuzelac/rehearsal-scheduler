@@ -139,9 +139,17 @@ body {
 
 .build-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 12px;
   padding: 10px 12px;
+}
+
+.build-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .include-toggle {
@@ -449,15 +457,49 @@ button:hover { background: var(--accent-hover); }
   gap: 3px;
 }
 
-.duration-slider {
-  width: 100px;
+.build-main .duration-slider {
+  flex: none;
+  width: 160px;
   accent-color: var(--accent);
   cursor: pointer;
 }
 
-.duration-label {
-  min-width: 28px;
+.duration-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 1px;
+}
+
+.build-main .duration-input {
+  flex: none;
+  width: 48px;
+  padding: 1px 4px;
+  font-size: 13px;
   text-align: right;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text);
+  -moz-appearance: textfield;
+  appearance: textfield;
+}
+
+.duration-input::-webkit-outer-spin-button,
+.duration-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.duration-input:hover { border-color: var(--border); }
+.duration-input:focus {
+  border-color: var(--accent);
+  background: var(--surface);
+  outline: none;
+}
+
+.duration-unit {
+  font-size: 13px;
+  color: var(--muted);
 }
 
 .scene-roles {

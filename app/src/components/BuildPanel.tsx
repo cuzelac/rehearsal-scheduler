@@ -97,8 +97,36 @@ export function BuildPanel({
                 >
                   {included ? '✓ In' : 'Add'}
                 </button>
-                <div className="scene-info">
+                <div className="build-main">
                   <span className="item-name">{scene.name}</span>
+                  {included && (
+                    <span className="scene-duration">
+                      <input
+                        type="range"
+                        min={5}
+                        max={Math.max(60, duration)}
+                        step={5}
+                        value={duration}
+                        onChange={(e) => setItemDuration(scene.id, Number(e.target.value))}
+                        className="duration-slider"
+                      />
+                      <span className="duration-value">
+                        <input
+                          type="number"
+                          min={1}
+                          value={duration}
+                          onChange={(e) => {
+                            const v = parseInt(e.target.value, 10);
+                            if (!isNaN(v) && v > 0) setItemDuration(scene.id, v);
+                          }}
+                          onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()}
+                          className="duration-input"
+                          title="Minutes — drag the slider or type any value"
+                        />
+                        <span className="duration-unit">m</span>
+                      </span>
+                    </span>
+                  )}
                   <div className="scene-roles">
                     {scene.roleIds.map((rid) => {
                       const role = data.roles.find((r) => r.id === rid);
@@ -108,20 +136,6 @@ export function BuildPanel({
                     })}
                   </div>
                 </div>
-                {included && (
-                  <span className="scene-duration">
-                    <input
-                      type="range"
-                      min={5}
-                      max={45}
-                      step={5}
-                      value={duration}
-                      onChange={(e) => setItemDuration(scene.id, Number(e.target.value))}
-                      className="duration-slider"
-                    />
-                    <span className="duration-label">{duration}m</span>
-                  </span>
-                )}
               </div>
             </li>
           );
