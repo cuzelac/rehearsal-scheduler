@@ -257,6 +257,72 @@ function buildEmailText(
   return lines.join('\n');
 }
 
+// Stage-manager view: a chronological timeline of who is called / dismissed,
+// with the scenes that run until the next change.
+function buildEmailByCalls(
+  orderedScenes: ScheduledScene[],
+  roles: Props['data']['roles'],
+  startMinute: number,
+  clock24: boolean
+): string {
+  const nameById = Object.fromEntries(roles.map((r) => [r.id, r.name]));
+  const metrics = computeMetrics(orderedScenes);
+  const fmt = (minutes: number) => formatClock(startMinute + minutes, clock24);
+
+  // Events keyed by offset-from-start.
+  const calls = new Map<number, string[]>();
+  const dismissals = new Map<number, string[]>();
+  const push = (m: Map<number, string[]>, k: number, v: string) => {
+    const a = m.get(k) ?? [];
+    a.push(v);
+    m.set(k, a);
+  };
+  for (const span of metrics.roleSpans) {
+    const nm = nameById[span.roleId] ?? span.roleId;
+    push(calls, span.firstCall, nm);
+    push(dismissals, span.lastRelease, nm);
+  }
+
+  // Scene start offsets, in schedule order.
+  const scenesWithStart: { title: string; start: number }[] = [];
+  let elapsed = 0;
+  for (const sc of orderedScenes) {
+    scenesWithStart.push({ title: sc.name, start: elapsed });
+    elapsed += sc.duration;
+  }
+
+  const eventTimes = [...new Set([...calls.keys(), ...dismissals.keys()])].sort((a, b) => a - b);
+
+  const lines: string[] = [];
+  lines.push('REHEARSAL SCHEDULE');
+  lines.push('==================');
+  lines.push('');
+  lines.push('BY CALL / DISMISS:');
+
+  if (eventTimes.length === 0) {
+    for (const s of scenesWithStart) lines.push(`  ${s.title}`);
+    return lines.join('\n');
+  }
+
+  eventTimes.forEach((t, i) => {
+    const call = calls.get(t);
+    const dism = dismissals.get(t);
+    // CALL always before DISMISS, and combined on one line when they share a time.
+    const parts: string[] = [];
+    if (call?.length) parts.push(`CALL ${call.join(', ')}`);
+    if (dism?.length) parts.push(`DISMISS ${dism.join(', ')}`);
+    lines.push(`  ${fmt(t)} — ${parts.join(' · ')}`);
+    const next = eventTimes[i + 1] ?? Infinity;
+    for (const s of scenesWithStart) {
+      if (s.start >= t && s.start < next) lines.push(`    ${s.title}`);
+    }
+  });
+
+  return lines.join('\n');
+}
+
+type EmailFormat = 'detail' | 'calls';
+
 const OBJECTIVES: { key: Objective; label: string; caption: string; title: string }[] = [
   { key: 'total', label: 'Total idle', caption: 'Least combined waiting across everyone.', title: 'Minimize the sum of all roles’ idle time (provably optimal)' },
   { key: 'minimax', label: 'Worst-off role', caption: 'No single actor gets stranded waiting.', title: 'Minimize the largest idle any one role suffers' },
@@ -268,6 +334,7 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
   const [copied, setCopied] = useState(false);
   const [showEmail, setShowEmail] = useState(false);
   const [emailText, setEmailText] = useState('');
+  const [emailFormat, setEmailFormat] = useState<EmailFormat>('detail');
   const clock24 = data.clock24;
 
   const sensors = useSensors(useSensor(PointerSensor));
@@ -303,10 +370,22 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
     reorderSchedule(arrayMove(scheduleIds, oldIndex, newIndex));
   }
 
+  function generateEmail(format: EmailFormat) {
+    return format === 'calls'
+      ? buildEmailByCalls(orderedScenes, data.roles, startMinute, clock24)
+      : buildEmailText(orderedScenes, data.roles, startMinute, clock24);
+  }
+
   function openEmailPreview() {
-    setEmailText(buildEmailText(orderedScenes, data.roles, startMinute, clock24));
+    setEmailText(generateEmail(emailFormat));
     setCopied(false);
     setShowEmail(true);
+  }
+
+  function switchEmailFormat(format: EmailFormat) {
+    setEmailFormat(format);
+    setEmailText(generateEmail(format));
+    setCopied(false);
   }
 
   async function handleCopy() {
@@ -420,6 +499,24 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
           <div className="modal-card" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
               <h3>Email preview</h3>
+              <div className="segmented email-format" role="group" aria-label="Email format">
+                <button
+                  type="button"
+                  className={`segment${emailFormat === 'detail' ? ' active' : ''}`}
+                  onClick={() => switchEmailFormat('detail')}
+                  title="Full detail: scene order with roles, plus per-role call times"
+                >
+                  Detail
+                </button>
+                <button
+                  type="button"
+                  className={`segment${emailFormat === 'calls' ? ' active' : ''}`}
+                  onClick={() => switchEmailFormat('calls')}
+                  title="Timeline of who is called and dismissed, with scenes"
+                >
+                  By call
+                </button>
+              </div>
               <button className="modal-close" onClick={() => setShowEmail(false)} aria-label="Close">✕</button>
             </div>
             <textarea
