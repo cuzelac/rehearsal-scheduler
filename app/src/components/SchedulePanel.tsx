@@ -14,12 +14,12 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useRehearsal } from '../useRehearsal';
+import { useAppData } from '../useAppData';
 import { computeMetrics, computeRoleChipColors } from '../scheduler';
 import type { ChipColor } from '../scheduler';
-import type { Scene } from '../types';
+import type { ScheduledScene, Objective } from '../types';
 
-type Props = ReturnType<typeof useRehearsal>;
+type Props = ReturnType<typeof useAppData>;
 
 function SortableSceneRow({
   scene,
@@ -28,10 +28,10 @@ function SortableSceneRow({
   roles,
   chipColors,
 }: {
-  scene: Scene;
+  scene: ScheduledScene;
   index: number;
   startMinute: number;
-  roles: Props['rehearsal']['roles'];
+  roles: Props['data']['roles'];
   chipColors: Record<string, ChipColor>;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
@@ -95,10 +95,10 @@ function IdleSummary({
   startMinute,
   objective,
 }: {
-  orderedScenes: Scene[];
-  roles: Props['rehearsal']['roles'];
+  orderedScenes: ScheduledScene[];
+  roles: Props['data']['roles'];
   startMinute: number;
-  objective: Props['rehearsal']['objective'];
+  objective: Objective;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('call');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -218,8 +218,8 @@ function IdleSummary({
 }
 
 function buildEmailText(
-  orderedScenes: Scene[],
-  roles: Props['rehearsal']['roles'],
+  orderedScenes: ScheduledScene[],
+  roles: Props['data']['roles'],
   startMinute: number
 ): string {
   const metrics = computeMetrics(orderedScenes);
@@ -261,47 +261,54 @@ function buildEmailText(
   return lines.join('\n');
 }
 
-const OBJECTIVES: { key: Props['rehearsal']['objective']; label: string; caption: string; title: string }[] = [
+const OBJECTIVES: { key: Objective; label: string; caption: string; title: string }[] = [
   { key: 'total', label: 'Total idle', caption: 'Least combined waiting across everyone.', title: 'Minimize the sum of all roles’ idle time (provably optimal)' },
   { key: 'minimax', label: 'Worst-off role', caption: 'No single actor gets stranded waiting.', title: 'Minimize the largest idle any one role suffers' },
   { key: 'spread', label: 'Even spread', caption: 'Everyone waits about the same amount.', title: 'Even out idle time across all roles' },
   { key: 'cost', label: 'Lowest paid cost', caption: 'Least held time for the paid cast (volunteers don’t count).', title: 'Minimize total call time of paid roles; volunteers are ignored' },
 ];
 
-export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, setStartMinute, setObjective, optimizing, optimizeProgress }: Props) {
-  const startMinute = rehearsal.startMinute;
-  const objective = rehearsal.objective;
+export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderSchedule, runAutoSchedule, setStartMinute, setObjective, optimizing, optimizeProgress }: Props) {
   const [copied, setCopied] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor));
 
-  const sceneMap = Object.fromEntries(rehearsal.scenes.map((s) => [s.id, s]));
-  const orderedScenes = rehearsal.schedule
-    .map((id) => sceneMap[id])
-    .filter(Boolean) as Scene[];
+  if (!currentRehearsal) {
+    return (
+      <div className="panel">
+        <h2>Schedule</h2>
+        <p className="empty">Create or select a rehearsal first.</p>
+      </div>
+    );
+  }
+
+  const startMinute = currentRehearsal.startMinute;
+  const objective = currentRehearsal.objective;
+  const orderedScenes = resolvedScenes(); // ScheduledScene[] in schedule order
+  const scheduleIds = orderedScenes.map((s) => s.id);
 
   const allChipColors = computeRoleChipColors(orderedScenes);
 
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const oldIndex = rehearsal.schedule.indexOf(String(active.id));
-    const newIndex = rehearsal.schedule.indexOf(String(over.id));
-    reorderSchedule(arrayMove(rehearsal.schedule, oldIndex, newIndex));
+    const oldIndex = scheduleIds.indexOf(String(active.id));
+    const newIndex = scheduleIds.indexOf(String(over.id));
+    reorderSchedule(arrayMove(scheduleIds, oldIndex, newIndex));
   }
 
   async function handleCopy() {
-    const text = buildEmailText(orderedScenes, rehearsal.roles, startMinute);
+    const text = buildEmailText(orderedScenes, data.roles, startMinute);
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
 
-  if (rehearsal.scenes.length === 0) {
+  if (orderedScenes.length === 0) {
     return (
       <div className="panel">
         <h2>Schedule</h2>
-        <p className="empty">Add scenes first.</p>
+        <p className="empty">No scenes in this rehearsal yet — add some in the Build tab.</p>
       </div>
     );
   }
@@ -368,7 +375,7 @@ export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, set
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={rehearsal.schedule} strategy={verticalListSortingStrategy}>
+        <SortableContext items={scheduleIds} strategy={verticalListSortingStrategy}>
           <ul className="schedule-list">
             {orderedScenes.map((scene, i) => (
               <SortableSceneRow
@@ -376,7 +383,7 @@ export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, set
                 scene={scene}
                 index={i}
                 startMinute={startMinute + sceneStarts[i]}
-                roles={rehearsal.roles}
+                roles={data.roles}
                 chipColors={allChipColors[scene.id] ?? {}}
               />
             ))}
@@ -384,7 +391,7 @@ export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, set
         </SortableContext>
       </DndContext>
 
-      <IdleSummary orderedScenes={orderedScenes} roles={rehearsal.roles} startMinute={startMinute} objective={objective} />
+      <IdleSummary orderedScenes={orderedScenes} roles={data.roles} startMinute={startMinute} objective={objective} />
     </div>
   );
 }

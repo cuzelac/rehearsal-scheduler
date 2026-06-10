@@ -1,4 +1,4 @@
-import type { Scene, Objective } from './types';
+import type { ScheduledScene, Objective } from './types';
 
 export interface RoleSpan {
   roleId: string;
@@ -13,7 +13,7 @@ export interface ScheduleMetrics {
   totalIdleMinutes: number;
 }
 
-export function computeMetrics(orderedScenes: Scene[]): ScheduleMetrics {
+export function computeMetrics(orderedScenes: ScheduledScene[]): ScheduleMetrics {
   const roleFirstCall: Record<string, number> = {};
   const roleLastRelease: Record<string, number> = {};
   const roleActiveMinutes: Record<string, number> = {};
@@ -47,12 +47,12 @@ export function computeMetrics(orderedScenes: Scene[]): ScheduleMetrics {
   };
 }
 
-function totalIdle(order: Scene[]): number {
+function totalIdle(order: ScheduledScene[]): number {
   return computeMetrics(order).totalIdleMinutes;
 }
 
 // Minimize the single largest per-role idle (fairness / minimax).
-function maxIdle(order: Scene[]): number {
+function maxIdle(order: ScheduledScene[]): number {
   const idles = computeMetrics(order).roleSpans.map((s) => s.idleMinutes);
   return idles.length ? Math.max(...idles) : 0;
 }
@@ -60,7 +60,7 @@ function maxIdle(order: Scene[]): number {
 // Minimize how unevenly idle is spread across roles (population variance),
 // with total idle as a tiny tie-breaker so it can't equalize everyone at a
 // uniformly high idle.
-function idleSpread(order: Scene[]): number {
+function idleSpread(order: ScheduledScene[]): number {
   const idles = computeMetrics(order).roleSpans.map((s) => s.idleMinutes);
   const n = idles.length;
   if (n === 0) return 0;
@@ -72,14 +72,14 @@ function idleSpread(order: Scene[]): number {
 
 // Minimize total call time (held hours) across paid roles only.
 // Equivalent to minimizing paid roles' idle (their active time is constant).
-function paidCallTime(order: Scene[], paidSet: Set<string>): number {
+function paidCallTime(order: ScheduledScene[], paidSet: Set<string>): number {
   return computeMetrics(order).roleSpans.reduce(
     (sum, s) => (paidSet.has(s.roleId) ? sum + (s.lastRelease - s.firstCall) : sum),
     0
   );
 }
 
-type CostFn = (order: Scene[]) => number;
+type CostFn = (order: ScheduledScene[]) => number;
 
 function costFor(objective: Objective, paidSet: Set<string>): CostFn {
   switch (objective) {
@@ -131,7 +131,7 @@ const EXACT_MAX_ROLES = 32; // single 32-bit role bitmask
  * Returns null if the problem is too large for the exact method.
  */
 function exactSchedule(
-  scenes: Scene[],
+  scenes: ScheduledScene[],
   onProgress?: ProgressFn,
   countRoleIds?: Set<string>
 ): string[] | null {
@@ -217,7 +217,7 @@ function exactSchedule(
 
 // Or-opt + 2-opt local search from a given starting order, minimizing `cost`.
 // Returns the locally optimal order.
-function localSearch(start: Scene[], cost: CostFn): Scene[] {
+function localSearch(start: ScheduledScene[], cost: CostFn): ScheduledScene[] {
   let current = [...start];
   let currentCost = cost(current);
 
@@ -270,7 +270,7 @@ function localSearch(start: Scene[], cost: CostFn): Scene[] {
 export type ProgressFn = (fraction: number) => void;
 
 export function autoSchedule(
-  scenes: Scene[],
+  scenes: ScheduledScene[],
   objective: Objective = 'total',
   paidRoleIds: string[] = [],
   onProgress?: ProgressFn
@@ -306,7 +306,7 @@ export function autoSchedule(
   const greedySeed = [...scenes].sort((a, b) => b.roleIds.length - a.roleIds.length);
   const exactTotal = exactSchedule(scenes); // null beyond DP limits
   const totalSeed = exactTotal
-    ? (exactTotal.map((id) => scenes.find((s) => s.id === id)!) as Scene[])
+    ? (exactTotal.map((id) => scenes.find((s) => s.id === id)!) as ScheduledScene[])
     : null;
 
   let best = localSearch(totalSeed ?? greedySeed, cost);
@@ -339,7 +339,7 @@ export type ChipColor = 'green' | 'red' | 'yellow';
  * Priority when a scene qualifies for multiple: green > red > yellow.
  */
 export function computeRoleChipColors(
-  orderedScenes: Scene[]
+  orderedScenes: ScheduledScene[]
 ): Record<string, Record<string, ChipColor>> {
   // Collect ordered appearance indices per role
   const appearances: Record<string, number[]> = {};

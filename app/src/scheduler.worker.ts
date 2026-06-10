@@ -1,8 +1,8 @@
 import { autoSchedule } from './scheduler';
-import type { Scene, Objective } from './types';
+import type { ScheduledScene, Objective } from './types';
 
 export interface WorkerRequest {
-  scenes: Scene[];
+  scenes: ScheduledScene[];
   objective: Objective;
   paidRoleIds: string[];
 }

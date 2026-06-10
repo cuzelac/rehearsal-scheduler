@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useRehearsal } from '../useRehearsal';
+import { useAppData } from '../useAppData';
 
-type Props = ReturnType<typeof useRehearsal>;
+type Props = ReturnType<typeof useAppData>;
 
-export function RolesPanel({ rehearsal, addRole, removeRole, updateRole, setRolePaid }: Props) {
+export function RolesPanel({ data, addRole, removeRole, updateRole, setRolePaid }: Props) {
   const [input, setInput] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -42,12 +42,12 @@ export function RolesPanel({ rehearsal, addRole, removeRole, updateRole, setRole
         <button onClick={handleAdd}>Add</button>
       </div>
 
-      {rehearsal.roles.length === 0 && (
+      {data.roles.length === 0 && (
         <p className="empty">No roles yet.</p>
       )}
 
       <ul className="item-list">
-        {rehearsal.roles.map((role) => (
+        {data.roles.map((role) => (
           <li key={role.id}>
             {editId === role.id ? (
               <>

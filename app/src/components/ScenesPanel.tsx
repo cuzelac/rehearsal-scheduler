@@ -14,10 +14,10 @@ import {
   arrayMove,
 } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { useRehearsal } from '../useRehearsal';
+import { useAppData } from '../useAppData';
 import type { Scene } from '../types';
 
-type Props = ReturnType<typeof useRehearsal>;
+type Props = ReturnType<typeof useAppData>;
 
 function SceneForm({
   roles,
@@ -25,13 +25,12 @@ function SceneForm({
   onSave,
   onCancel,
 }: {
-  roles: Props['rehearsal']['roles'];
+  roles: Props['data']['roles'];
   initial?: Scene;
-  onSave: (name: string, duration: number, roleIds: string[]) => void;
+  onSave: (name: string, roleIds: string[]) => void;
   onCancel: () => void;
 }) {
   const [name, setName] = useState(initial?.name ?? '');
-  const [duration, setDuration] = useState(String(initial?.duration ?? ''));
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
     new Set(initial?.roleIds ?? [])
   );
@@ -46,9 +45,8 @@ function SceneForm({
 
   function handleSave() {
     const trimmed = name.trim();
-    const mins = parseInt(duration, 10);
-    if (!trimmed || isNaN(mins) || mins <= 0) return;
-    onSave(trimmed, mins, [...selectedRoles]);
+    if (!trimmed) return;
+    onSave(trimmed, [...selectedRoles]);
   }
 
   return (
@@ -60,16 +58,6 @@ function SceneForm({
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Act 1 Sc 3"
           onKeyDown={(e) => e.key === 'Enter' && handleSave()}
-        />
-      </div>
-      <div className="form-row">
-        <label>Duration (min)</label>
-        <input
-          type="number"
-          min={1}
-          value={duration}
-          onChange={(e) => setDuration(e.target.value)}
-          style={{ width: 80 }}
         />
       </div>
       <div className="form-row roles-row">
@@ -106,7 +94,7 @@ function SortableSceneItem({
   onCancelEdit,
 }: {
   scene: Scene;
-  roles: Props['rehearsal']['roles'];
+  roles: Props['data']['roles'];
   isEditing: boolean;
   onEdit: () => void;
   onRemove: () => void;
@@ -128,7 +116,7 @@ function SortableSceneItem({
         <SceneForm
           roles={roles}
           initial={scene}
-          onSave={(name, duration, roleIds) => onUpdate({ name, duration, roleIds })}
+          onSave={(name, roleIds) => onUpdate({ name, roleIds })}
           onCancel={onCancelEdit}
         />
       ) : (
@@ -136,18 +124,6 @@ function SortableSceneItem({
           <span className="drag-handle" {...attributes} {...listeners}>⠿</span>
           <div className="scene-info">
             <span className="item-name">{scene.name}</span>
-            <span className="scene-duration">
-              <input
-                type="range"
-                min={5}
-                max={45}
-                step={5}
-                value={scene.duration}
-                onChange={(e) => onUpdate({ duration: Number(e.target.value) })}
-                className="duration-slider"
-              />
-              <span className="duration-label">{scene.duration}m</span>
-            </span>
             <div className="scene-roles">
               {scene.roleIds.length === 0 ? (
                 <span className="hint">No roles</span>
@@ -171,7 +147,7 @@ function SortableSceneItem({
   );
 }
 
-export function ScenesPanel({ rehearsal, addScene, removeScene, updateScene, reorderScenes }: Props) {
+export function ScenesPanel({ data, addScene, removeScene, updateScene, reorderScenes }: Props) {
   const [adding, setAdding] = useState(false);
   const [editId, setEditId] = useState<string | null>(null);
 
@@ -180,7 +156,7 @@ export function ScenesPanel({ rehearsal, addScene, removeScene, updateScene, reo
   function handleDragEnd(event: DragEndEvent) {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
-    const ids = rehearsal.scenes.map((s) => s.id);
+    const ids = data.scenes.map((s) => s.id);
     const oldIndex = ids.indexOf(String(active.id));
     const newIndex = ids.indexOf(String(over.id));
     reorderScenes(arrayMove(ids, oldIndex, newIndex));
@@ -188,8 +164,8 @@ export function ScenesPanel({ rehearsal, addScene, removeScene, updateScene, reo
 
   return (
     <div className="panel">
-      <h2>Scenes</h2>
-      <p className="hint">Add each scene with its duration and which roles are required.</p>
+      <h2>Scene library</h2>
+      <p className="hint">Define every scene once: its name and which roles appear. Durations are set per rehearsal in the Build tab.</p>
 
       {!adding && (
         <button onClick={() => setAdding(true)}>+ Add Scene</button>
@@ -197,27 +173,27 @@ export function ScenesPanel({ rehearsal, addScene, removeScene, updateScene, reo
 
       {adding && (
         <SceneForm
-          roles={rehearsal.roles}
-          onSave={(name, duration, roleIds) => {
-            addScene(name, duration, roleIds);
+          roles={data.roles}
+          onSave={(name, roleIds) => {
+            addScene(name, roleIds);
             setAdding(false);
           }}
           onCancel={() => setAdding(false)}
         />
       )}
 
-      {rehearsal.scenes.length === 0 && !adding && (
+      {data.scenes.length === 0 && !adding && (
         <p className="empty">No scenes yet.</p>
       )}
 
       <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-        <SortableContext items={rehearsal.scenes.map((s) => s.id)} strategy={verticalListSortingStrategy}>
+        <SortableContext items={data.scenes.map((s) => s.id)} strategy={verticalListSortingStrategy}>
           <ul className="item-list scenes-list">
-            {rehearsal.scenes.map((scene) => (
+            {data.scenes.map((scene) => (
               <SortableSceneItem
                 key={scene.id}
                 scene={scene}
-                roles={rehearsal.roles}
+                roles={data.roles}
                 isEditing={editId === scene.id}
                 onEdit={() => setEditId(scene.id)}
                 onRemove={() => removeScene(scene.id)}
