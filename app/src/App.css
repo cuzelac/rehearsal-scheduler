@@ -371,25 +371,41 @@ button:hover { background: var(--accent-hover); }
   gap: 8px;
 }
 
-.pay-toggle {
-  background: transparent;
+.pay-segmented {
+  display: inline-flex;
   border: 1px solid var(--border);
-  color: var(--muted);
   border-radius: 99px;
-  padding: 3px 12px;
-  font-size: 12px;
-  cursor: pointer;
+  overflow: hidden;
   flex-shrink: 0;
 }
 
-.pay-toggle.paid {
-  border-color: var(--accent);
-  color: var(--accent);
-  background: rgba(124, 106, 247, 0.12);
+.pay-segment {
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  color: var(--muted);
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
 }
 
-.pay-toggle:hover { color: var(--text); }
-.pay-toggle.paid:hover { color: var(--accent); }
+.pay-segment + .pay-segment {
+  border-left: 1px solid var(--border);
+}
+
+.pay-segment:hover:not(.active) { color: var(--text); background: var(--bg); }
+
+.pay-segment.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* Volunteer side, when active, reads as muted rather than accent */
+.pay-segment:last-child.active {
+  background: var(--muted);
+  color: var(--bg);
+}
 
 .volunteer-tag {
   margin-left: 6px;

@@ -65,13 +65,24 @@ export function RolesPanel({ rehearsal, addRole, removeRole, updateRole, setRole
             ) : (
               <>
                 <span className="item-name">{role.name}</span>
-                <button
-                  className={`pay-toggle${role.paid ? ' paid' : ''}`}
-                  onClick={() => setRolePaid(role.id, !role.paid)}
-                  title={role.paid ? 'Paid — counts toward cost. Click to mark volunteer.' : 'Volunteer — excluded from cost. Click to mark paid.'}
-                >
-                  {role.paid ? 'Paid' : 'Volunteer'}
-                </button>
+                <div className="pay-segmented" role="group" aria-label={`Pay status for ${role.name}`}>
+                  <button
+                    className={`pay-segment${role.paid ? ' active' : ''}`}
+                    aria-pressed={role.paid}
+                    onClick={() => setRolePaid(role.id, true)}
+                    title="Paid — counts toward cost"
+                  >
+                    Paid
+                  </button>
+                  <button
+                    className={`pay-segment${!role.paid ? ' active' : ''}`}
+                    aria-pressed={!role.paid}
+                    onClick={() => setRolePaid(role.id, false)}
+                    title="Volunteer — excluded from cost"
+                  >
+                    Volunteer
+                  </button>
+                </div>
                 <div className="item-actions">
                   <button className="btn-ghost" onClick={() => startEdit(role.id, role.name)}>Edit</button>
                   <button className="btn-ghost danger" onClick={() => removeRole(role.id)}>Remove</button>
