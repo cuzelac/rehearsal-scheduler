@@ -367,10 +367,14 @@ function buildEmailByPerson(
     const span = spanById[role.id];
     lines.push('');
     lines.push(`${role.name} — arrive ${fmt(span.firstCall)}, done ${fmt(span.lastRelease)}`);
+    let prevEnd: number | null = null;
     for (const s of scenesWithStart) {
-      if (s.scene.roleIds.includes(role.id)) {
-        lines.push(`  ${fmt(s.start)} - ${s.scene.name}`);
+      if (!s.scene.roleIds.includes(role.id)) continue;
+      if (prevEnd !== null && s.start > prevEnd) {
+        lines.push(`  free ${fmt(prevEnd)} – ${fmt(s.start)} (${s.start - prevEnd} min)`);
       }
+      lines.push(`  ${fmt(s.start)} - ${s.scene.name}`);
+      prevEnd = s.start + s.scene.duration;
     }
   }
 
