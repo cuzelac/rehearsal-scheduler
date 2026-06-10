@@ -45,7 +45,7 @@ export default function App() {
       <header className="app-header">
         <div className="app-header-top">
           <h1>Rehearsal Scheduler</h1>
-          {currentRehearsal && currentTotal > 0 && (
+          {(tab === 'build' || tab === 'schedule') && currentRehearsal && currentTotal > 0 && (
             <span className="total-duration">{fmtTotal(currentTotal)}</span>
           )}
           <div className="header-tools">
