@@ -335,7 +335,49 @@ function buildEmailByCalls(
   return lines.join('\n');
 }
 
-type EmailFormat = 'detail' | 'calls';
+// Per-person view: each role's arrival/release plus the scenes they're in.
+// All notices in one block, alphabetical by role name for easy lookup.
+function buildEmailByPerson(
+  orderedScenes: ScheduledScene[],
+  roles: Props['data']['roles'],
+  startMinute: number,
+  clock24: boolean,
+  dateLabel: string
+): string {
+  const fmt = (minutes: number) => formatClock(startMinute + minutes, clock24);
+  const metrics = computeMetrics(orderedScenes);
+  const spanById = Object.fromEntries(metrics.roleSpans.map((s) => [s.roleId, s]));
+
+  // Scenes with start offsets, in schedule order.
+  const scenesWithStart: { scene: ScheduledScene; start: number }[] = [];
+  let elapsed = 0;
+  for (const sc of orderedScenes) {
+    scenesWithStart.push({ scene: sc, start: elapsed });
+    elapsed += sc.duration;
+  }
+
+  const appearing = roles
+    .filter((r) => spanById[r.id])
+    .sort((a, b) => a.name.localeCompare(b.name));
+
+  const lines: string[] = [...emailHeading(dateLabel)];
+  lines.push('');
+  lines.push('PERSONAL CALLS:');
+  for (const role of appearing) {
+    const span = spanById[role.id];
+    lines.push('');
+    lines.push(`${role.name} — arrive ${fmt(span.firstCall)}, done ${fmt(span.lastRelease)}`);
+    for (const s of scenesWithStart) {
+      if (s.scene.roleIds.includes(role.id)) {
+        lines.push(`  ${fmt(s.start)} - ${s.scene.name}`);
+      }
+    }
+  }
+
+  return lines.join('\n');
+}
+
+type EmailFormat = 'detail' | 'calls' | 'person';
 
 const OBJECTIVES: { key: Objective; label: string; caption: string; title: string }[] = [
   { key: 'total', label: 'Total idle', caption: 'Least combined waiting across everyone.', title: 'Minimize the sum of all roles’ idle time (provably optimal)' },
@@ -386,9 +428,10 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
 
   function generateEmail(format: EmailFormat) {
     const dateLabel = formatDate(currentRehearsal!.date);
-    return format === 'calls'
-      ? buildEmailByCalls(orderedScenes, data.roles, startMinute, clock24, dateLabel)
-      : buildEmailText(orderedScenes, data.roles, startMinute, clock24, dateLabel);
+    const args = [orderedScenes, data.roles, startMinute, clock24, dateLabel] as const;
+    if (format === 'calls') return buildEmailByCalls(...args);
+    if (format === 'person') return buildEmailByPerson(...args);
+    return buildEmailText(...args);
   }
 
   function openEmailPreview() {
@@ -530,6 +573,14 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
                   title="Timeline of who is called and dismissed, with scenes"
                 >
                   By call
+                </button>
+                <button
+                  type="button"
+                  className={`segment${emailFormat === 'person' ? ' active' : ''}`}
+                  onClick={() => switchEmailFormat('person')}
+                  title="Each performer's personal call: arrive/done times and their scenes"
+                >
+                  Per person
                 </button>
               </div>
               <button className="modal-close" onClick={() => setShowEmail(false)} aria-label="Close">✕</button>
