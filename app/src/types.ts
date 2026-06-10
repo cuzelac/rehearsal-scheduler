@@ -42,4 +42,5 @@ export interface AppData {
   scenes: Scene[]; // shared library; array order = stable display/Build order
   rehearsals: Rehearsal[];
   currentRehearsalId: string | null;
+  clock24: boolean; // display times in 24h (true) or 12h AM/PM (false)
 }

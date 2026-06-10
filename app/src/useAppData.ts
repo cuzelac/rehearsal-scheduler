@@ -27,6 +27,7 @@ const EMPTY: AppData = {
   scenes: [],
   rehearsals: [],
   currentRehearsalId: null,
+  clock24: false,
 };
 
 // Migrate the legacy single-rehearsal shape into the multi-rehearsal AppData.
@@ -60,6 +61,7 @@ function migrateLegacy(parsed: any): AppData {
     scenes,
     rehearsals: [rehearsal],
     currentRehearsalId: rehearsal.id,
+    clock24: false,
   };
 }
 
@@ -72,6 +74,7 @@ function normalize(parsed: any): AppData {
       roles: parsed.roles ?? [],
       scenes: parsed.scenes ?? [],
       rehearsals: parsed.rehearsals,
+      clock24: parsed.clock24 ?? false,
       currentRehearsalId:
         parsed.currentRehearsalId ?? parsed.rehearsals[0]?.id ?? null,
     };
@@ -221,6 +224,10 @@ export function useAppData() {
     patchCurrent((r) => ({ ...r, objective }));
   }
 
+  function setClock24(clock24: boolean) {
+    setData((d) => ({ ...d, clock24 }));
+  }
+
   // Resolve the current rehearsal's items into ScheduledScene[] (schedule order).
   function resolvedScenes(): ScheduledScene[] {
     if (!currentRehearsal) return [];
@@ -327,6 +334,7 @@ export function useAppData() {
     reorderSchedule,
     setStartMinute,
     setObjective,
+    setClock24,
     runAutoSchedule,
     // data io
     exportData,

@@ -104,6 +104,31 @@ body {
   min-width: 180px;
 }
 
+.meta-time {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.schedule-controls-left {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.schedule-start-note {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.clock-toggle .segment {
+  padding: 4px 10px;
+  font-size: 12px;
+}
+
 .build-summary {
   color: var(--muted);
   font-size: 13px;

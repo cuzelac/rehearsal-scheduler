@@ -21,18 +21,30 @@ import type { ScheduledScene, Objective } from '../types';
 
 type Props = ReturnType<typeof useAppData>;
 
+// Format an absolute minutes-from-midnight value in 12h or 24h.
+function formatClock(totalMinutes: number, clock24: boolean): string {
+  const h = Math.floor(totalMinutes / 60) % 24;
+  const m = totalMinutes % 60;
+  if (clock24) return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  const ampm = h >= 12 ? 'PM' : 'AM';
+  const h12 = h % 12 === 0 ? 12 : h % 12;
+  return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+}
+
 function SortableSceneRow({
   scene,
   index,
   startMinute,
   roles,
   chipColors,
+  clock24,
 }: {
   scene: ScheduledScene;
   index: number;
   startMinute: number;
   roles: Props['data']['roles'];
   chipColors: Record<string, ChipColor>;
+  clock24: boolean;
 }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } =
     useSortable({ id: scene.id });
@@ -45,12 +57,6 @@ function SortableSceneRow({
 
   const endMinute = startMinute + scene.duration;
 
-  function fmt(minutes: number) {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
-    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
-  }
-
   return (
     <li ref={setNodeRef} style={style} className="schedule-row">
       <span className="drag-handle" {...attributes} {...listeners}>⠿</span>
@@ -58,7 +64,7 @@ function SortableSceneRow({
       <div className="schedule-main">
         <span className="item-name">{scene.name}</span>
         <span className="scene-meta">
-          {fmt(startMinute)} – {fmt(endMinute)} · {scene.duration} min
+          {formatClock(startMinute, clock24)} – {formatClock(endMinute, clock24)} · {scene.duration} min
         </span>
         <div className="schedule-roles">
           {scene.roleIds.map((rid) => {
@@ -95,11 +101,13 @@ function IdleSummary({
   roles,
   startMinute,
   objective,
+  clock24,
 }: {
   orderedScenes: ScheduledScene[];
   roles: Props['data']['roles'];
   startMinute: number;
   objective: Objective;
+  clock24: boolean;
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('call');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -115,14 +123,7 @@ function IdleSummary({
     return `${m}m`;
   }
 
-  function fmtTime(offsetMinutes: number) {
-    const total = startMinute + offsetMinutes;
-    const h = Math.floor(total / 60) % 24;
-    const m = total % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-  }
+  const fmtTime = (offsetMinutes: number) => formatClock(startMinute + offsetMinutes, clock24);
 
   function handleSort(key: SortKey) {
     if (key === sortKey) {
@@ -221,18 +222,12 @@ function IdleSummary({
 function buildEmailText(
   orderedScenes: ScheduledScene[],
   roles: Props['data']['roles'],
-  startMinute: number
+  startMinute: number,
+  clock24: boolean
 ): string {
   const metrics = computeMetrics(orderedScenes);
 
-  function fmt(minutes: number) {
-    const total = startMinute + minutes;
-    const h = Math.floor(total / 60) % 24;
-    const m = total % 60;
-    const ampm = h >= 12 ? 'PM' : 'AM';
-    const h12 = h % 12 === 0 ? 12 : h % 12;
-    return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
-  }
+  const fmt = (minutes: number) => formatClock(startMinute + minutes, clock24);
 
   const lines: string[] = [];
   lines.push('REHEARSAL SCHEDULE');
@@ -269,8 +264,9 @@ const OBJECTIVES: { key: Objective; label: string; caption: string; title: strin
   { key: 'cost', label: 'Lowest paid cost', caption: 'Least held time for the paid cast (volunteers don’t count).', title: 'Minimize total call time of paid roles; volunteers are ignored' },
 ];
 
-export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderSchedule, runAutoSchedule, setStartMinute, setObjective, optimizing, optimizeProgress }: Props) {
+export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderSchedule, runAutoSchedule, setObjective, setClock24, optimizing, optimizeProgress }: Props) {
   const [copied, setCopied] = useState(false);
+  const clock24 = data.clock24;
 
   const sensors = useSensors(useSensor(PointerSensor));
 
@@ -299,7 +295,7 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
   }
 
   async function handleCopy() {
-    const text = buildEmailText(orderedScenes, data.roles, startMinute);
+    const text = buildEmailText(orderedScenes, data.roles, startMinute, clock24);
     await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -326,16 +322,26 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
       <h2>Schedule</h2>
 
       <div className="schedule-controls">
-        <div className="start-time-row">
-          <label>Rehearsal start</label>
-          <input
-            type="time"
-            value={`${String(Math.floor(startMinute / 60)).padStart(2, '0')}:${String(startMinute % 60).padStart(2, '0')}`}
-            onChange={(e) => {
-              const [h, m] = e.target.value.split(':').map(Number);
-              setStartMinute(h * 60 + (m || 0));
-            }}
-          />
+        <div className="schedule-controls-left">
+          <span className="schedule-start-note">Starts {formatClock(startMinute, clock24)} · set in Build</span>
+          <div className="segmented clock-toggle" role="group" aria-label="Clock format">
+            <button
+              type="button"
+              className={`segment${!clock24 ? ' active' : ''}`}
+              onClick={() => setClock24(false)}
+              title="12-hour clock (AM/PM)"
+            >
+              12h
+            </button>
+            <button
+              type="button"
+              className={`segment${clock24 ? ' active' : ''}`}
+              onClick={() => setClock24(true)}
+              title="24-hour clock"
+            >
+              24h
+            </button>
+          </div>
         </div>
         <div className="schedule-buttons">
           <button onClick={runAutoSchedule} disabled={optimizing}>
@@ -386,13 +392,14 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
                 startMinute={startMinute + sceneStarts[i]}
                 roles={data.roles}
                 chipColors={allChipColors[scene.id] ?? {}}
+                clock24={clock24}
               />
             ))}
           </ul>
         </SortableContext>
       </DndContext>
 
-      <IdleSummary orderedScenes={orderedScenes} roles={data.roles} startMinute={startMinute} objective={objective} />
+      <IdleSummary orderedScenes={orderedScenes} roles={data.roles} startMinute={startMinute} objective={objective} clock24={clock24} />
     </div>
   );
 }

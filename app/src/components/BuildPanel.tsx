@@ -16,6 +16,7 @@ export function BuildPanel({
   setItemDuration,
   renameRehearsal,
   setRehearsalDate,
+  setStartMinute,
   deleteRehearsal,
 }: Props) {
   if (!currentRehearsal) {
@@ -50,6 +51,17 @@ export function BuildPanel({
           value={currentRehearsal.date}
           onChange={(e) => setRehearsalDate(currentRehearsal.id, e.target.value)}
         />
+        <label className="meta-time">
+          Start
+          <input
+            type="time"
+            value={`${String(Math.floor(currentRehearsal.startMinute / 60)).padStart(2, '0')}:${String(currentRehearsal.startMinute % 60).padStart(2, '0')}`}
+            onChange={(e) => {
+              const [h, m] = e.target.value.split(':').map(Number);
+              setStartMinute(h * 60 + (m || 0));
+            }}
+          />
+        </label>
         <button
           className="btn-ghost danger"
           onClick={() => {
