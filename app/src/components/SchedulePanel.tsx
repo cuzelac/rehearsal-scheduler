@@ -21,6 +21,22 @@ import type { ScheduledScene, Objective } from '../types';
 
 type Props = ReturnType<typeof useAppData>;
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+// Format an ISO 'YYYY-MM-DD' as e.g. "Jun 12, 2026" (component-parsed to avoid TZ shifts).
+function formatDate(iso: string): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso);
+  if (!m) return '';
+  const [, y, mo, d] = m;
+  return `${MONTHS[Number(mo) - 1]} ${Number(d)}, ${y}`;
+}
+
+// Build the "REHEARSAL SCHEDULE — <date>" heading + underline.
+function emailHeading(dateLabel: string): string[] {
+  const title = dateLabel ? `REHEARSAL SCHEDULE - ${dateLabel}` : 'REHEARSAL SCHEDULE';
+  return [title, '='.repeat(title.length)];
+}
+
 // Format an absolute minutes-from-midnight value in 12h or 24h.
 function formatClock(totalMinutes: number, clock24: boolean): string {
   const h = Math.floor(totalMinutes / 60) % 24;
@@ -223,15 +239,14 @@ function buildEmailText(
   orderedScenes: ScheduledScene[],
   roles: Props['data']['roles'],
   startMinute: number,
-  clock24: boolean
+  clock24: boolean,
+  dateLabel: string
 ): string {
   const metrics = computeMetrics(orderedScenes);
 
   const fmt = (minutes: number) => formatClock(startMinute + minutes, clock24);
 
-  const lines: string[] = [];
-  lines.push('REHEARSAL SCHEDULE');
-  lines.push('==================');
+  const lines: string[] = [...emailHeading(dateLabel)];
   lines.push('');
   lines.push('SCENE ORDER:');
   let elapsed = 0;
@@ -263,7 +278,8 @@ function buildEmailByCalls(
   orderedScenes: ScheduledScene[],
   roles: Props['data']['roles'],
   startMinute: number,
-  clock24: boolean
+  clock24: boolean,
+  dateLabel: string
 ): string {
   const nameById = Object.fromEntries(roles.map((r) => [r.id, r.name]));
   const metrics = computeMetrics(orderedScenes);
@@ -293,9 +309,7 @@ function buildEmailByCalls(
 
   const eventTimes = [...new Set([...calls.keys(), ...dismissals.keys()])].sort((a, b) => a - b);
 
-  const lines: string[] = [];
-  lines.push('REHEARSAL SCHEDULE');
-  lines.push('==================');
+  const lines: string[] = [...emailHeading(dateLabel)];
   lines.push('');
   lines.push('BY CALL / DISMISS:');
 
@@ -371,9 +385,10 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
   }
 
   function generateEmail(format: EmailFormat) {
+    const dateLabel = formatDate(currentRehearsal!.date);
     return format === 'calls'
-      ? buildEmailByCalls(orderedScenes, data.roles, startMinute, clock24)
-      : buildEmailText(orderedScenes, data.roles, startMinute, clock24);
+      ? buildEmailByCalls(orderedScenes, data.roles, startMinute, clock24, dateLabel)
+      : buildEmailText(orderedScenes, data.roles, startMinute, clock24, dateLabel);
   }
 
   function openEmailPreview() {
