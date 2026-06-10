@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -34,6 +34,13 @@ function SceneForm({
   const [selectedRoles, setSelectedRoles] = useState<Set<string>>(
     new Set(initial?.roleIds ?? [])
   );
+  const nameRef = useRef<HTMLInputElement>(null);
+
+  // Focus (and select existing text) the name field when the form opens.
+  useEffect(() => {
+    nameRef.current?.focus();
+    nameRef.current?.select();
+  }, []);
 
   function toggleRole(id: string) {
     setSelectedRoles((prev) => {
@@ -54,6 +61,7 @@ function SceneForm({
       <div className="form-row">
         <label>Scene name</label>
         <input
+          ref={nameRef}
           value={name}
           onChange={(e) => setName(e.target.value)}
           placeholder="e.g. Act 1 Sc 3"
