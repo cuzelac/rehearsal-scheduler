@@ -1,6 +1,7 @@
 export interface Role {
   id: string;
   name: string;
+  paid: boolean; // paid hourly (counts toward cost) vs volunteer
 }
 
 export interface Scene {
@@ -10,7 +11,7 @@ export interface Scene {
   roleIds: string[];
 }
 
-export type Objective = 'total' | 'minimax' | 'spread';
+export type Objective = 'total' | 'minimax' | 'spread' | 'cost';
 
 export interface Rehearsal {
   roles: Role[];

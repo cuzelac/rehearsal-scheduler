@@ -371,6 +371,35 @@ button:hover { background: var(--accent-hover); }
   gap: 8px;
 }
 
+.pay-toggle {
+  background: transparent;
+  border: 1px solid var(--border);
+  color: var(--muted);
+  border-radius: 99px;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.pay-toggle.paid {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: rgba(124, 106, 247, 0.12);
+}
+
+.pay-toggle:hover { color: var(--text); }
+.pay-toggle.paid:hover { color: var(--accent); }
+
+.volunteer-tag {
+  margin-left: 6px;
+  font-size: 11px;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  border-radius: 99px;
+  padding: 0 6px;
+}
+
 .objective-row {
   display: flex;
   align-items: center;

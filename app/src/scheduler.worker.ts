@@ -4,6 +4,7 @@ import type { Scene, Objective } from './types';
 export interface WorkerRequest {
   scenes: Scene[];
   objective: Objective;
+  paidRoleIds: string[];
 }
 
 export type WorkerResponse =
@@ -11,8 +12,8 @@ export type WorkerResponse =
   | { type: 'result'; schedule: string[] };
 
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
-  const { scenes, objective } = e.data;
-  const schedule = autoSchedule(scenes, objective, (value) => {
+  const { scenes, objective, paidRoleIds } = e.data;
+  const schedule = autoSchedule(scenes, objective, paidRoleIds, (value) => {
     const msg: WorkerResponse = { type: 'progress', value };
     self.postMessage(msg);
   });

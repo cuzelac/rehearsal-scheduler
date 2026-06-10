@@ -21,7 +21,10 @@ function load(): Rehearsal {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      return { ...DEFAULT, ...parsed };
+      const merged = { ...DEFAULT, ...parsed };
+      // Legacy roles lack `paid`; default them to paid.
+      merged.roles = (merged.roles ?? []).map((r: Role) => ({ ...r, paid: r.paid ?? true }));
+      return merged;
     }
   } catch {}
   return DEFAULT;
@@ -43,8 +46,15 @@ export function useRehearsal() {
   }, []);
 
   function addRole(name: string) {
-    const role: Role = { id: newId(), name: name.trim() };
+    const role: Role = { id: newId(), name: name.trim(), paid: true };
     setRehearsal((r) => ({ ...r, roles: [...r.roles, role] }));
+  }
+
+  function setRolePaid(id: string, paid: boolean) {
+    setRehearsal((r) => ({
+      ...r,
+      roles: r.roles.map((ro) => (ro.id === id ? { ...ro, paid } : ro)),
+    }));
   }
 
   function removeRole(id: string) {
@@ -139,7 +149,12 @@ export function useRehearsal() {
       if (workerRef.current === worker) workerRef.current = null;
     };
 
-    const req: WorkerRequest = { scenes: orderedScenes, objective: rehearsal.objective };
+    const paidRoleIds = rehearsal.roles.filter((r) => r.paid).map((r) => r.id);
+    const req: WorkerRequest = {
+      scenes: orderedScenes,
+      objective: rehearsal.objective,
+      paidRoleIds,
+    };
     worker.postMessage(req);
   }
 
@@ -162,6 +177,7 @@ export function useRehearsal() {
     addRole,
     removeRole,
     updateRole,
+    setRolePaid,
     addScene,
     removeScene,
     updateScene,

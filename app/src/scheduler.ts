@@ -70,13 +70,30 @@ function idleSpread(order: Scene[]): number {
   return variance + 1e-6 * total;
 }
 
+// Minimize total call time (held hours) across paid roles only.
+// Equivalent to minimizing paid roles' idle (their active time is constant).
+function paidCallTime(order: Scene[], paidSet: Set<string>): number {
+  return computeMetrics(order).roleSpans.reduce(
+    (sum, s) => (paidSet.has(s.roleId) ? sum + (s.lastRelease - s.firstCall) : sum),
+    0
+  );
+}
+
 type CostFn = (order: Scene[]) => number;
 
-const COST_FNS: Record<Objective, CostFn> = {
-  total: totalIdle,
-  minimax: maxIdle,
-  spread: idleSpread,
-};
+function costFor(objective: Objective, paidSet: Set<string>): CostFn {
+  switch (objective) {
+    case 'minimax':
+      return maxIdle;
+    case 'spread':
+      return idleSpread;
+    case 'cost':
+      return (order) => paidCallTime(order, paidSet);
+    case 'total':
+    default:
+      return totalIdle;
+  }
+}
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -107,9 +124,17 @@ const EXACT_MAX_ROLES = 32; // single 32-bit role bitmask
  * in S, will appear again in the complement (U \ S \ {k}), and is not in k.
  * That subset-decomposable cost is exactly what Held–Karp optimises.
  *
+ * When `countRoleIds` is given, only those roles count toward the idle cost
+ * (used by the 'cost' objective to minimize paid roles' held time). When
+ * omitted, every role counts (the 'total' objective).
+ *
  * Returns null if the problem is too large for the exact method.
  */
-function exactSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] | null {
+function exactSchedule(
+  scenes: Scene[],
+  onProgress?: ProgressFn,
+  countRoleIds?: Set<string>
+): string[] | null {
   const N = scenes.length;
   if (N > EXACT_MAX_SCENES) return null;
 
@@ -121,6 +146,15 @@ function exactSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] | nul
     }
   }
   if (roleIndex.size > EXACT_MAX_ROLES) return null;
+
+  // Bitmask of roles that count toward the cost (all roles if unspecified).
+  let countMask = 0;
+  if (countRoleIds) {
+    for (const [rid, bit] of roleIndex) if (countRoleIds.has(rid)) countMask |= 1 << bit;
+  } else {
+    countMask = roleIndex.size === 32 ? 0xffffffff : (1 << roleIndex.size) - 1;
+  }
+  countMask = countMask >>> 0;
 
   const sceneRoleMask = scenes.map((s) => {
     let m = 0;
@@ -159,7 +193,7 @@ function exactSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] | nul
       const newS = (S | low) >>> 0;
       const complement = (full ^ newS) >>> 0;
       const waiting = popcount32(
-        (appeared & orMask[complement] & ~sceneRoleMask[k]) >>> 0
+        (appeared & orMask[complement] & ~sceneRoleMask[k] & countMask) >>> 0
       );
       const nc = c + scenes[k].duration * waiting;
       if (nc < cost[newS]) {
@@ -238,6 +272,7 @@ export type ProgressFn = (fraction: number) => void;
 export function autoSchedule(
   scenes: Scene[],
   objective: Objective = 'total',
+  paidRoleIds: string[] = [],
   onProgress?: ProgressFn
 ): string[] {
   if (scenes.length <= 1) {
@@ -245,18 +280,25 @@ export function autoSchedule(
     return scenes.map((s) => s.id);
   }
 
-  // 'total' is additive, so the exact Held–Karp DP applies (N ≤ 25, roles ≤ 32).
-  if (objective === 'total') {
-    const exact = exactSchedule(scenes, onProgress);
+  const paidSet = new Set(paidRoleIds);
+  // 'cost' with no paid roles has a flat (all-zero) cost surface; fall back to
+  // 'total' so it still produces a sensible schedule.
+  const effective: Objective = objective === 'cost' && paidSet.size === 0 ? 'total' : objective;
+
+  // Additive objectives can use the exact Held–Karp DP (N ≤ 25, roles ≤ 32):
+  // 'total' counts all roles; 'cost' counts only paid roles (masked waiting).
+  if (effective === 'total' || effective === 'cost') {
+    const mask = effective === 'cost' ? paidSet : undefined;
+    const exact = exactSchedule(scenes, onProgress, mask);
     if (exact) {
       onProgress?.(1);
       return exact;
     }
   }
 
-  // Otherwise (fairness objectives, or 'total' beyond the exact limits):
-  // multi-start Or-opt + 2-opt local search with the matching cost function.
-  const cost = COST_FNS[objective];
+  // Otherwise (fairness objectives, or additive objectives beyond the exact
+  // limits): multi-start Or-opt + 2-opt local search with the matching cost.
+  const cost = costFor(effective, paidSet);
   const STARTS = 50;
 
   // Seeds: the exact total-idle optimum (a strong starting point) when feasible,

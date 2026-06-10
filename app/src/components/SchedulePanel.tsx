@@ -149,8 +149,13 @@ function IdleSummary({
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  const paidSet = new Set(roles.filter((r) => r.paid).map((r) => r.id));
   const idles = metrics.roleSpans.map((s) => s.idleMinutes);
   const totalCallTime = metrics.roleSpans.reduce((sum, s) => sum + (s.lastRelease - s.firstCall), 0);
+  const paidCallTime = metrics.roleSpans.reduce(
+    (sum, s) => (paidSet.has(s.roleId) ? sum + (s.lastRelease - s.firstCall) : sum),
+    0
+  );
   const worstIdle = idles.length ? Math.max(...idles) : 0;
   const meanIdle = idles.length ? idles.reduce((a, b) => a + b, 0) / idles.length : 0;
   const spreadIdle = idles.length
@@ -163,6 +168,9 @@ function IdleSummary({
         <span>Total rehearsal: <strong>{fmtDuration(metrics.totalDuration)}</strong></span>
         <span className="metric" title="Sum of every role's call time (release − call), i.e. total hours the cast is held">
           Total call time: <strong>{fmtDuration(totalCallTime)}</strong>
+        </span>
+        <span className={`metric${objective === 'cost' ? ' active' : ''}`} title="Total held hours across paid roles only — the cost-relevant number">
+          Paid call time: <strong>{fmtDuration(paidCallTime)}</strong>
         </span>
         <span className={`metric${objective === 'total' ? ' active' : ''}`} title="Sum of every role's idle time">
           Total idle: <strong>{fmtDuration(metrics.totalIdleMinutes)}</strong>
@@ -187,9 +195,13 @@ function IdleSummary({
         <tbody>
           {sorted.map((span) => {
               const role = roles.find((r) => r.id === span.roleId);
+              const isVolunteer = role ? !role.paid : false;
               return (
                 <tr key={span.roleId} className={span.idleMinutes > 0 ? 'idle-row' : ''}>
-                  <td>{role?.name ?? span.roleId}</td>
+                  <td>
+                    {role?.name ?? span.roleId}
+                    {isVolunteer && <span className="volunteer-tag">volunteer</span>}
+                  </td>
                   <td>{fmtTime(span.firstCall)}</td>
                   <td>{fmtTime(span.lastRelease)}</td>
                   <td>{fmtDuration(span.lastRelease - span.firstCall)}</td>
@@ -253,6 +265,7 @@ const OBJECTIVES: { key: Props['rehearsal']['objective']; label: string; caption
   { key: 'total', label: 'Total idle', caption: 'Least combined waiting across everyone.', title: 'Minimize the sum of all roles’ idle time (provably optimal)' },
   { key: 'minimax', label: 'Worst-off role', caption: 'No single actor gets stranded waiting.', title: 'Minimize the largest idle any one role suffers' },
   { key: 'spread', label: 'Even spread', caption: 'Everyone waits about the same amount.', title: 'Even out idle time across all roles' },
+  { key: 'cost', label: 'Lowest paid cost', caption: 'Least held time for the paid cast (volunteers don’t count).', title: 'Minimize total call time of paid roles; volunteers are ignored' },
 ];
 
 export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, setStartMinute, setObjective, optimizing, optimizeProgress }: Props) {

@@ -3,7 +3,7 @@ import { useRehearsal } from '../useRehearsal';
 
 type Props = ReturnType<typeof useRehearsal>;
 
-export function RolesPanel({ rehearsal, addRole, removeRole, updateRole }: Props) {
+export function RolesPanel({ rehearsal, addRole, removeRole, updateRole, setRolePaid }: Props) {
   const [input, setInput] = useState('');
   const [editId, setEditId] = useState<string | null>(null);
   const [editName, setEditName] = useState('');
@@ -65,6 +65,13 @@ export function RolesPanel({ rehearsal, addRole, removeRole, updateRole }: Props
             ) : (
               <>
                 <span className="item-name">{role.name}</span>
+                <button
+                  className={`pay-toggle${role.paid ? ' paid' : ''}`}
+                  onClick={() => setRolePaid(role.id, !role.paid)}
+                  title={role.paid ? 'Paid — counts toward cost. Click to mark volunteer.' : 'Volunteer — excluded from cost. Click to mark paid.'}
+                >
+                  {role.paid ? 'Paid' : 'Volunteer'}
+                </button>
                 <div className="item-actions">
                   <button className="btn-ghost" onClick={() => startEdit(role.id, role.name)}>Edit</button>
                   <button className="btn-ghost danger" onClick={() => removeRole(role.id)}>Remove</button>
