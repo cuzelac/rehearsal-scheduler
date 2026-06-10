@@ -1,8 +1,9 @@
 import { autoSchedule } from './scheduler';
-import type { Scene } from './types';
+import type { Scene, Objective } from './types';
 
 export interface WorkerRequest {
   scenes: Scene[];
+  objective: Objective;
 }
 
 export type WorkerResponse =
@@ -10,8 +11,8 @@ export type WorkerResponse =
   | { type: 'result'; schedule: string[] };
 
 self.onmessage = (e: MessageEvent<WorkerRequest>) => {
-  const { scenes } = e.data;
-  const schedule = autoSchedule(scenes, (value) => {
+  const { scenes, objective } = e.data;
+  const schedule = autoSchedule(scenes, objective, (value) => {
     const msg: WorkerResponse = { type: 'progress', value };
     self.postMessage(msg);
   });

@@ -93,10 +93,12 @@ function IdleSummary({
   orderedScenes,
   roles,
   startMinute,
+  objective,
 }: {
   orderedScenes: Scene[];
   roles: Props['rehearsal']['roles'];
   startMinute: number;
+  objective: Props['rehearsal']['objective'];
 }) {
   const [sortKey, setSortKey] = useState<SortKey>('call');
   const [sortDir, setSortDir] = useState<SortDir>('asc');
@@ -146,12 +148,25 @@ function IdleSummary({
     return sortDir === 'asc' ? cmp : -cmp;
   });
 
+  const idles = metrics.roleSpans.map((s) => s.idleMinutes);
+  const worstIdle = idles.length ? Math.max(...idles) : 0;
+  const meanIdle = idles.length ? idles.reduce((a, b) => a + b, 0) / idles.length : 0;
+  const spreadIdle = idles.length
+    ? Math.sqrt(idles.reduce((a, x) => a + (x - meanIdle) ** 2, 0) / idles.length)
+    : 0;
+
   return (
     <div className="idle-summary">
       <div className="summary-header">
         <span>Total rehearsal: <strong>{fmtDuration(metrics.totalDuration)}</strong></span>
-        <span className={metrics.totalIdleMinutes > 0 ? 'idle-warn' : 'idle-ok'}>
+        <span className={`metric${objective === 'total' ? ' active' : ''}`} title="Sum of every role's idle time">
           Total idle: <strong>{fmtDuration(metrics.totalIdleMinutes)}</strong>
+        </span>
+        <span className={`metric${objective === 'minimax' ? ' active' : ''}`} title="Largest idle any single role suffers">
+          Worst role: <strong>{fmtDuration(worstIdle)}</strong>
+        </span>
+        <span className={`metric${objective === 'spread' ? ' active' : ''}`} title="Standard deviation of idle across roles">
+          Spread: <strong>{fmtDuration(Math.round(spreadIdle))}</strong>
         </span>
       </div>
       <table className="idle-table">
@@ -227,8 +242,15 @@ function buildEmailText(
   return lines.join('\n');
 }
 
-export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, setStartMinute, optimizing, optimizeProgress }: Props) {
+const OBJECTIVES: { key: Props['rehearsal']['objective']; label: string; caption: string; title: string }[] = [
+  { key: 'total', label: 'Total idle', caption: 'Least combined waiting across everyone.', title: 'Minimize the sum of all roles’ idle time (provably optimal)' },
+  { key: 'minimax', label: 'Worst-off role', caption: 'No single actor gets stranded waiting.', title: 'Minimize the largest idle any one role suffers' },
+  { key: 'spread', label: 'Even spread', caption: 'Everyone waits about the same amount.', title: 'Even out idle time across all roles' },
+];
+
+export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, setStartMinute, setObjective, optimizing, optimizeProgress }: Props) {
   const startMinute = rehearsal.startMinute;
+  const objective = rehearsal.objective;
   const [copied, setCopied] = useState(false);
 
   const sensors = useSensors(useSensor(PointerSensor));
@@ -297,6 +319,27 @@ export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, set
         </div>
       </div>
 
+      <div className="objective-row">
+        <span className="objective-label">Optimize for</span>
+        <div className="segmented" role="group" aria-label="Optimization objective">
+          {OBJECTIVES.map((o) => (
+            <button
+              key={o.key}
+              type="button"
+              className={`segment${objective === o.key ? ' active' : ''}`}
+              onClick={() => setObjective(o.key)}
+              disabled={optimizing}
+              title={o.title}
+            >
+              {o.label}
+            </button>
+          ))}
+        </div>
+        <span className="objective-caption">
+          {OBJECTIVES.find((o) => o.key === objective)?.caption}
+        </span>
+      </div>
+
       {optimizing && (
         <div className="optimize-progress" role="progressbar" aria-valuenow={Math.round(optimizeProgress * 100)}>
           <div className="optimize-bar" style={{ width: `${Math.round(optimizeProgress * 100)}%` }} />
@@ -321,7 +364,7 @@ export function SchedulePanel({ rehearsal, reorderSchedule, runAutoSchedule, set
         </SortableContext>
       </DndContext>
 
-      <IdleSummary orderedScenes={orderedScenes} roles={rehearsal.roles} startMinute={startMinute} />
+      <IdleSummary orderedScenes={orderedScenes} roles={rehearsal.roles} startMinute={startMinute} objective={objective} />
     </div>
   );
 }

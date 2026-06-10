@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import type { Rehearsal, Role, Scene } from './types';
+import type { Rehearsal, Role, Scene, Objective } from './types';
 import type { WorkerRequest, WorkerResponse } from './scheduler.worker';
 
 const STORAGE_KEY = 'rehearsal-scheduler-v1';
@@ -13,6 +13,7 @@ const DEFAULT: Rehearsal = {
   scenes: [],
   schedule: [],
   startMinute: 19 * 60,
+  objective: 'total',
 };
 
 function load(): Rehearsal {
@@ -138,12 +139,16 @@ export function useRehearsal() {
       if (workerRef.current === worker) workerRef.current = null;
     };
 
-    const req: WorkerRequest = { scenes: orderedScenes };
+    const req: WorkerRequest = { scenes: orderedScenes, objective: rehearsal.objective };
     worker.postMessage(req);
   }
 
   function setStartMinute(minutes: number) {
     setRehearsal((r) => ({ ...r, startMinute: minutes }));
+  }
+
+  function setObjective(objective: Objective) {
+    setRehearsal((r) => ({ ...r, objective }));
   }
 
   function clearAll() {
@@ -164,6 +169,7 @@ export function useRehearsal() {
     reorderScenes,
     runAutoSchedule,
     setStartMinute,
+    setObjective,
     clearAll,
   };
 }

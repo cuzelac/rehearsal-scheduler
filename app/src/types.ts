@@ -10,9 +10,12 @@ export interface Scene {
   roleIds: string[];
 }
 
+export type Objective = 'total' | 'minimax' | 'spread';
+
 export interface Rehearsal {
   roles: Role[];
   scenes: Scene[];
   schedule: string[]; // ordered scene ids
   startMinute: number; // minutes from midnight, e.g. 19*60 = 7pm
+  objective: Objective; // what Auto-optimize minimizes
 }

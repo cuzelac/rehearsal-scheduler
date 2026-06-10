@@ -371,6 +371,64 @@ button:hover { background: var(--accent-hover); }
   gap: 8px;
 }
 
+.objective-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.objective-label {
+  font-size: 14px;
+  color: var(--muted);
+}
+
+.segmented {
+  display: inline-flex;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.segment {
+  background: var(--surface);
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  border-radius: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.12s, color 0.12s;
+}
+
+.segment:last-child { border-right: none; }
+.segment:hover:not(:disabled) { color: var(--text); background: var(--bg); }
+.segment.active {
+  background: var(--accent);
+  color: #fff;
+}
+.segment:disabled { cursor: default; opacity: 0.6; }
+
+.objective-caption {
+  font-size: 12px;
+  color: var(--muted);
+  flex-basis: 100%;
+}
+
+.summary-header .metric {
+  color: var(--muted);
+}
+
+.summary-header .metric.active {
+  color: var(--accent);
+}
+
+.summary-header .metric.active strong {
+  color: var(--accent);
+}
+
 .optimize-progress {
   position: relative;
   height: 22px;

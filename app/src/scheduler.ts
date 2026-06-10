@@ -1,4 +1,4 @@
-import type { Scene } from './types';
+import type { Scene, Objective } from './types';
 
 export interface RoleSpan {
   roleId: string;
@@ -50,6 +50,33 @@ export function computeMetrics(orderedScenes: Scene[]): ScheduleMetrics {
 function totalIdle(order: Scene[]): number {
   return computeMetrics(order).totalIdleMinutes;
 }
+
+// Minimize the single largest per-role idle (fairness / minimax).
+function maxIdle(order: Scene[]): number {
+  const idles = computeMetrics(order).roleSpans.map((s) => s.idleMinutes);
+  return idles.length ? Math.max(...idles) : 0;
+}
+
+// Minimize how unevenly idle is spread across roles (population variance),
+// with total idle as a tiny tie-breaker so it can't equalize everyone at a
+// uniformly high idle.
+function idleSpread(order: Scene[]): number {
+  const idles = computeMetrics(order).roleSpans.map((s) => s.idleMinutes);
+  const n = idles.length;
+  if (n === 0) return 0;
+  const total = idles.reduce((a, b) => a + b, 0);
+  const mean = total / n;
+  const variance = idles.reduce((a, x) => a + (x - mean) ** 2, 0) / n;
+  return variance + 1e-6 * total;
+}
+
+type CostFn = (order: Scene[]) => number;
+
+const COST_FNS: Record<Objective, CostFn> = {
+  total: totalIdle,
+  minimax: maxIdle,
+  spread: idleSpread,
+};
 
 function shuffle<T>(arr: T[]): T[] {
   const a = [...arr];
@@ -154,10 +181,11 @@ function exactSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] | nul
   return order.map((i) => scenes[i].id);
 }
 
-// Or-opt + 2-opt local search from a given starting order. Returns the locally optimal order.
-function localSearch(start: Scene[]): Scene[] {
+// Or-opt + 2-opt local search from a given starting order, minimizing `cost`.
+// Returns the locally optimal order.
+function localSearch(start: Scene[], cost: CostFn): Scene[] {
   let current = [...start];
-  let currentCost = totalIdle(current);
+  let currentCost = cost(current);
 
   let anyImproved = true;
   while (anyImproved) {
@@ -171,10 +199,10 @@ function localSearch(start: Scene[]): Scene[] {
         const without = [...current.slice(0, i), ...current.slice(i + 1)];
         const insertAt = j < i ? j + 1 : j;
         const candidate = [...without.slice(0, insertAt), scene, ...without.slice(insertAt)];
-        const cost = totalIdle(candidate);
-        if (cost < currentCost) {
+        const c = cost(candidate);
+        if (c < currentCost) {
           current = candidate;
-          currentCost = cost;
+          currentCost = c;
           anyImproved = true;
           break;
         }
@@ -190,10 +218,10 @@ function localSearch(start: Scene[]): Scene[] {
         for (let j = i + 1; j < current.length; j++) {
           const candidate = [...current];
           [candidate[i], candidate[j]] = [candidate[j], candidate[i]];
-          const cost = totalIdle(candidate);
-          if (cost < currentCost) {
+          const c = cost(candidate);
+          if (c < currentCost) {
             current = candidate;
-            currentCost = cost;
+            currentCost = c;
             swapImproved = true;
             anyImproved = true;
           }
@@ -207,33 +235,49 @@ function localSearch(start: Scene[]): Scene[] {
 
 export type ProgressFn = (fraction: number) => void;
 
-export function autoSchedule(scenes: Scene[], onProgress?: ProgressFn): string[] {
+export function autoSchedule(
+  scenes: Scene[],
+  objective: Objective = 'total',
+  onProgress?: ProgressFn
+): string[] {
   if (scenes.length <= 1) {
     onProgress?.(1);
     return scenes.map((s) => s.id);
   }
 
-  // Tier 1: exact optimal via Held–Karp DP (N ≤ 25, roles ≤ 32)
-  const exact = exactSchedule(scenes, onProgress);
-  if (exact) {
-    onProgress?.(1);
-    return exact;
+  // 'total' is additive, so the exact Held–Karp DP applies (N ≤ 25, roles ≤ 32).
+  if (objective === 'total') {
+    const exact = exactSchedule(scenes, onProgress);
+    if (exact) {
+      onProgress?.(1);
+      return exact;
+    }
   }
 
-  // Tier 2: multi-start Or-opt + 2-opt fallback for larger problems
+  // Otherwise (fairness objectives, or 'total' beyond the exact limits):
+  // multi-start Or-opt + 2-opt local search with the matching cost function.
+  const cost = COST_FNS[objective];
   const STARTS = 50;
-  const greedySeed = [...scenes].sort((a, b) => b.roleIds.length - a.roleIds.length);
 
-  let best = localSearch(greedySeed);
-  let bestCost = totalIdle(best);
+  // Seeds: the exact total-idle optimum (a strong starting point) when feasible,
+  // then a greedy role-count seed; remaining starts are random shuffles.
+  const greedySeed = [...scenes].sort((a, b) => b.roleIds.length - a.roleIds.length);
+  const exactTotal = exactSchedule(scenes); // null beyond DP limits
+  const totalSeed = exactTotal
+    ? (exactTotal.map((id) => scenes.find((s) => s.id === id)!) as Scene[])
+    : null;
+
+  let best = localSearch(totalSeed ?? greedySeed, cost);
+  let bestCost = cost(best);
   onProgress?.(1 / STARTS);
 
   for (let s = 1; s < STARTS; s++) {
-    const result = localSearch(shuffle(scenes));
-    const cost = totalIdle(result);
-    if (cost < bestCost) {
+    const seed = s === 1 && totalSeed ? greedySeed : shuffle(scenes);
+    const result = localSearch(seed, cost);
+    const c = cost(result);
+    if (c < bestCost) {
       best = result;
-      bestCost = cost;
+      bestCost = c;
     }
     onProgress?.((s + 1) / STARTS);
   }
