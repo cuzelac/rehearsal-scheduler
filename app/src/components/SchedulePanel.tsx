@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import {
   DndContext,
   closestCenter,
@@ -266,9 +266,18 @@ const OBJECTIVES: { key: Objective; label: string; caption: string; title: strin
 
 export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderSchedule, runAutoSchedule, setObjective, setClock24, optimizing, optimizeProgress }: Props) {
   const [copied, setCopied] = useState(false);
+  const [showEmail, setShowEmail] = useState(false);
+  const [emailText, setEmailText] = useState('');
   const clock24 = data.clock24;
 
   const sensors = useSensors(useSensor(PointerSensor));
+
+  useEffect(() => {
+    if (!showEmail) return;
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setShowEmail(false); };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [showEmail]);
 
   if (!currentRehearsal) {
     return (
@@ -294,9 +303,14 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
     reorderSchedule(arrayMove(scheduleIds, oldIndex, newIndex));
   }
 
+  function openEmailPreview() {
+    setEmailText(buildEmailText(orderedScenes, data.roles, startMinute, clock24));
+    setCopied(false);
+    setShowEmail(true);
+  }
+
   async function handleCopy() {
-    const text = buildEmailText(orderedScenes, data.roles, startMinute, clock24);
-    await navigator.clipboard.writeText(text);
+    await navigator.clipboard.writeText(emailText);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }
@@ -347,8 +361,8 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
           <button onClick={runAutoSchedule} disabled={optimizing}>
             {optimizing ? 'Optimizing…' : 'Auto-optimize'}
           </button>
-          <button className="btn-ghost" onClick={handleCopy} disabled={optimizing}>
-            {copied ? 'Copied!' : 'Copy for email'}
+          <button className="btn-ghost" onClick={openEmailPreview} disabled={optimizing}>
+            Preview email
           </button>
         </div>
       </div>
@@ -400,6 +414,28 @@ export function SchedulePanel({ data, currentRehearsal, resolvedScenes, reorderS
       </DndContext>
 
       <IdleSummary orderedScenes={orderedScenes} roles={data.roles} startMinute={startMinute} objective={objective} clock24={clock24} />
+
+      {showEmail && (
+        <div className="modal-backdrop" onClick={() => setShowEmail(false)}>
+          <div className="modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-head">
+              <h3>Email preview</h3>
+              <button className="modal-close" onClick={() => setShowEmail(false)} aria-label="Close">✕</button>
+            </div>
+            <textarea
+              className="email-preview"
+              value={emailText}
+              onChange={(e) => setEmailText(e.target.value)}
+              spellCheck={false}
+            />
+            <div className="modal-actions">
+              <span className="modal-hint">Edits here are copied as-is, not saved.</span>
+              <button onClick={handleCopy}>{copied ? 'Copied!' : 'Copy'}</button>
+              <button className="btn-ghost" onClick={() => setShowEmail(false)}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
