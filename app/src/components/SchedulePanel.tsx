@@ -55,32 +55,33 @@ function SortableSceneRow({
     <li ref={setNodeRef} style={style} className="schedule-row">
       <span className="drag-handle" {...attributes} {...listeners}>⠿</span>
       <span className="scene-index">{index + 1}</span>
-      <div className="schedule-scene-info">
+      <div className="schedule-main">
         <span className="item-name">{scene.name}</span>
-        <span className="scene-duration">{scene.duration} min</span>
-        <span className="time-range">{fmt(startMinute)} – {fmt(endMinute)}</span>
-      </div>
-      <div className="schedule-roles">
-        {scene.roleIds.map((rid) => {
-          const role = roles.find((r) => r.id === rid);
-          if (!role) return null;
-          const color = chipColors[rid];
-          const colorClass = color ? ` chip-${color}` : '';
-          const titles: Record<string, string> = {
-            green: 'First call',
-            red: 'Last call',
-            yellow: 'Returns after a break',
-          };
-          return (
-            <span
-              key={rid}
-              className={`chip small${colorClass}`}
-              title={titles[color] ?? ''}
-            >
-              {role.name}
-            </span>
-          );
-        })}
+        <span className="scene-meta">
+          {fmt(startMinute)} – {fmt(endMinute)} · {scene.duration} min
+        </span>
+        <div className="schedule-roles">
+          {scene.roleIds.map((rid) => {
+            const role = roles.find((r) => r.id === rid);
+            if (!role) return null;
+            const color = chipColors[rid];
+            const colorClass = color ? ` chip-${color}` : '';
+            const titles: Record<string, string> = {
+              green: 'First call',
+              red: 'Last call',
+              yellow: 'Returns after a break',
+            };
+            return (
+              <span
+                key={rid}
+                className={`chip small${colorClass}`}
+                title={titles[color] ?? ''}
+              >
+                {role.name}
+              </span>
+            );
+          })}
+        </div>
       </div>
     </li>
   );
