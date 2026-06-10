@@ -65,6 +65,7 @@ export default function App() {
           </div>
         </div>
 
+        {(tab === 'build' || tab === 'schedule') && (
         <div className="rehearsal-bar">
           <label className="rehearsal-bar-label">Rehearsal</label>
           <select
@@ -80,7 +81,7 @@ export default function App() {
               </option>
             ))}
           </select>
-          {creating ? (
+          {tab === 'build' && (creating ? (
             <span className="rehearsal-create">
               <input
                 autoFocus
@@ -97,8 +98,9 @@ export default function App() {
             </span>
           ) : (
             <button className="btn-ghost" onClick={() => setCreating(true)}>+ New</button>
-          )}
+          ))}
         </div>
+        )}
 
         <nav className="app-nav">
           {TABS.map((t) => (
@@ -114,9 +116,6 @@ export default function App() {
               {t.key === 'scenes' && data.scenes.length > 0 && (
                 <span className="badge">{data.scenes.length}</span>
               )}
-              {t.key === 'build' && currentRehearsal && currentRehearsal.items.length > 0 && (
-                <span className="badge">{currentRehearsal.items.length}</span>
-              )}
             </button>
           ))}
         </nav>
@@ -125,7 +124,7 @@ export default function App() {
         {data.rehearsals.length === 0 && tab !== 'roles' && tab !== 'scenes' && (
           <div className="panel">
             <p className="empty">No rehearsals yet. Create one to start building a schedule.</p>
-            <button onClick={() => setCreating(true)}>+ New rehearsal</button>
+            <button onClick={() => { setTab('build'); setCreating(true); }}>+ New rehearsal</button>
           </div>
         )}
         {tab === 'roles' && <RolesPanel {...state} />}
